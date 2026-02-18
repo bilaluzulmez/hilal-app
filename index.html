@@ -1,0 +1,1609 @@
+<html><head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="expires" content="Fri, 31 Dec 2099 23:59:59 UTC">
+<meta name="author" content="Abdurrahman ÖZLEM">
+
+<title>EVKAT</title>
+
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#0f172a">
+
+
+  <script type=text/javascript>
+
+    function lzt() {
+      return  LocalTime	+ drift	- lon *	4;
+    }
+
+    function days() {
+      return  jd - .5 +	(beta +	drift -	lon * 4) / 1440;
+    }
+
+    function compute() {
+      eps   = days();
+      M	    = 357.529*RPD + .98560028*RPD * eps;
+      delta = 280.466*RPD + .98564737*RPD * eps;
+      eps   = 23.43929*RPD - .000000356*RPD * eps;
+      slong = delta + 1.914*RPD	* sin(M) + .02*RPD * sin(2 * M);
+      drift = atan2(cos(eps) * sin(slong), cos(slong));
+      drift = asin(sin(drift - delta)) /RPD*4 +	720.021;
+      delta = asin(sin(eps) * sin(slong));
+    }
+
+    function fsin() {
+      return  sin(delta) * sin(phi);
+    }
+
+    function fcos() {
+      return  cos(delta) * cos(phi);
+    }
+
+    function DayOfWeek() {
+      return (jd + 36524) % 7 +	1;
+    }
+
+    function azimuth(latitude) {
+      Q	= -atan2(sin(beta), cos(phi)*tan(latitude) - sin(phi)*cos(beta));
+      i	= Q / RPD;
+      if (i < 0)  i += 360;
+      return  i;
+    }
+
+    function elevation() {
+      return  asin(cos(beta) * fcos() +	fsin());
+    }
+
+    function lha() {
+      return  temkin - lzt();
+    }
+
+    function Sun() {
+      beta = lha();
+      compute();
+      beta = RPD/4 * lha();
+      SunElev =	elevation()/RPD;
+    }
+
+    function timing(elevation) {
+      var  loop=1,
+	   limit1 = [  1,  .793353,  .923880,  .980785 ],
+	   limit2 = [ -1, -.991445, -.923880, -.793353 ];
+
+      beta = 0;
+      do {
+	compute();
+	sign = elevation < 90 *	RPD;
+	elev = (sin(elevation) - fsin()) / fcos();
+	if (AlpMode < 2)  limitx = 0;
+	if (elev > limit1[limitx])  elev = limit1[limitx];
+	if (elev < limit2[limitx])  elev = limit2[limitx];
+	beta = 4/RPD * acos(elev);
+	if (sign)  beta	= -beta;
+      }	while (loop--);
+    }
+
+    function asr(sani) {
+      limitx = 3;
+      beta = 0;
+      compute();
+      timing(atan2(1,(sani?-2:-1)-abs(tan(phi-delta)))
+       *(sani?1.00191:1.00065)+(sani?(.0817-180*.00191)*RPD:(.0439-180*.00065)*RPD));
+    }
+
+    function Alperen(vakit) {
+      limitx = 2;
+      switch(vakit) {
+      case 1:
+	limitx = 1;
+	timing(depr_imsak * RPD);
+	imsak1 = beta;
+	break;
+
+      case 2:
+	timing((DEPR_GUNES-Elev2) * RPD);
+	break;
+
+      case 3:
+	timing(DEPR_ISRAK * RPD);
+	break;
+
+      case 4:
+	timing((180-DEPR_AKSAM+Elev2) *	RPD);
+	beta = (imsak1 + beta) / 2;
+	compute();
+	break;
+
+      case 5:
+	beta = 2;
+	compute();
+	break;
+
+      case 6:
+	asr(0);
+	break;
+
+      case 7:
+	asr(1);
+	break;
+
+      case 8:
+	timing((180-DEPR_ISFIRAR) * RPD);
+	break;
+
+      case 9:
+	timing((180-DEPR_AKSAM+Elev2) *	RPD);
+	aksam1 = beta;
+	break;
+
+      case 10:
+	if (AlpMode == 5)  beta	= aksam1 + tmkn[9] + 60;
+	else {
+	  limitx = 1;
+	  timing((180 -	depr_yatsi) * RPD);
+	  if (AlpMode >	2) {
+	    aksam1 = (1440 + imsak1 - aksam1) /	(AlpMode-1) + aksam1;
+	    if (beta > aksam1)	beta = aksam1;
+	  }
+	}
+      }
+      if (AlpMode)  temkin = tmkn[vakit];
+      else  temkin = 0;
+      return  range(temkin + beta + lzt() + .5);
+    }
+
+    function QiblaDir()	{
+      beta = lon*RPD - B_KABE;
+      return  azimuth(E_KABE);
+    }
+
+    function range(angle) {
+      return  (angle + 1440) % 1440;
+    }
+
+    function QiblaTime() {
+      loop=1;
+
+      QiblaDir();
+      Q	= phi *	cos(Q) > 0 ? Q + 180*RPD : Q;
+      m	= atan(cos(Q) /	tan(!phi ? 1e-12 : phi));
+
+      beta = 0;
+      do {
+	compute();
+	elev = cos(m) *	sin(delta) / sin(!phi ?	1e-12 :	phi);
+	elev = asin(elev) - m;
+	beta = cos(elev) * sin(Q) / cos(delta);
+	beta = -4/RPD *	asin(beta);
+      }	while (loop--);
+      return  range(beta + lzt() + .5);
+    }
+
+    function Moon() {
+      Sun();
+      beta     = lha();
+      delta    = days();
+      x	       = 2*117.85*RPD +	2*12.19074911*RPD * delta;
+      beta     = 134.963*RPD + 13.06499295*RPD * delta;
+      BetaM    =  93.272*RPD + 13.22935024*RPD * delta;
+      drift    = 218.316*RPD + 13.17639647*RPD * delta
+		+ 6.2888*RPD * sin(beta)
+		+ 1.2740*RPD * sin(x - beta)
+		+  .6583*RPD * sin(x)
+		+  .2136*RPD * sin(2 * beta)
+		-  .1851*RPD * sin(M)
+		-  .1143*RPD * sin(2 * BetaM)
+		+  .0588*RPD * sin(x - 2 * beta)
+		+  .0571*RPD * sin(x - M - beta)
+		+  .0533*RPD * sin(x + beta)
+		+  .0458*RPD * sin(x - M)
+		-  .0409*RPD * sin(M - beta)
+		-  .0347*RPD * sin(x/2)
+		-  .0304*RPD * sin(M + beta)
+		+  .0153*RPD * sin(x - 2 * BetaM)
+		-  .0125*RPD * sin(beta	+ 2 * BetaM)
+		+  .0110*RPD * sin(beta	- 2 * BetaM);
+
+      MoonDist = 385.0006
+		- 20.9054 * cos(beta)
+		-  3.6991 * cos(x - beta)
+		-  2.9560 * cos(x)
+		-   .5699 * cos(2 * beta)
+		+   .2462 * cos(x - 2 *	beta)
+		-   .2046 * cos(x - M)
+		-   .1707 * cos(x + beta)
+		-   .1521 * cos(x - M -	beta)
+		-   .1296 * cos(M - beta)
+		+   .1087 * cos(x/2)
+		+   .1048 * cos(M + beta)
+		+   .0797 * cos(beta - 2 * BetaM)
+		+   .0489 * cos(M);
+
+      BetaM    = 5.1281*RPD * sin(BetaM)
+		+ .2806*RPD * sin(beta + BetaM)
+		+ .2777*RPD * sin(beta - BetaM)
+		+ .1732*RPD * sin(x - BetaM)
+		+ .0554*RPD * sin(x - beta + BetaM)
+		+ .0463*RPD * sin(x - beta - BetaM)
+		+ .0326*RPD * sin(x + BetaM);
+
+       MoonDist0 = MoonDist;
+       beta = (280.461-180)*RPD	+ .98564737*RPD	* delta	+ RPD/4	* (lha() + drift)
+		- atan2(sin(drift)*cos(eps) - tan(BetaM)*sin(eps), cos(drift));
+       delta = asin(sin(BetaM)*cos(eps)	+ cos(BetaM)*sin(eps)*sin(drift));
+       MoonAzi = azimuth(delta);
+       beta = elevation();
+       MoonDist	-= 6.371 * sin(beta);
+       MoonElev	= beta/RPD - cos(beta) * 365 / MoonDist;
+       beta = 149.619 -	2.498 *	cos(M) - .021 *	cos(2 *	M);
+       drift -=	slong;
+       M = cos(drift) *	cos(BetaM);
+       elong = acos(M);
+       M = (1 -	M) / 2;
+       slong = 11950 * M / MoonDist;
+       delta = (1 - cos((6.371 + 1.738)	/ MoonDist0 + .696 / beta)) / 2;
+       MV = false;
+       if (M < delta) {
+	 limitx	= 3;
+	 delta	= 1 - M	/ delta;
+       }
+       else if (1 - M <	delta) {
+	 limitx	= 4;
+	 delta	= 1 - (1 - M) /	delta;
+	 MV = MoonElev > -.5;
+       }
+       else if (M < .004866)  limitx = 0;
+       else if (MoonElev < -.5)	 limitx	= 1;
+       else {
+	 limitx	= 2;
+	 delta	= -.28/tan((MoonElev+1.5)*RPD) - max(min(SunElev, 5), -10) + 6*sqrt(min(slong, 5)) - 4.9 + Elev1;
+	 MV = delta > 0;
+       }
+       drift /=	2 * PI;
+       drift -=	floor(drift);
+    }
+
+    function MoonData()	{
+      MoonQibla	= MoonZenith = MoonNadir = MoonRise = MoonSet =	FullMoon = Conjunc
+      =	CresVis1 = CresVis0 = SunEcl1 =	SunEcl0	= MoonEcl1 = MoonEcl0 =	temkin = -1;
+      Moon();
+      FM = drift < .5;
+      SE = limitx == 3;
+      ME = limitx == 4;
+      MQ = MoonAzi < angl[3];
+      MN = MoonAzi < 180;
+      MR = MoonElev < -.5;
+      MV0 = MV;
+      while (++temkin <	1440) {
+	Moon();
+	if (FM	&& drift > .5) {
+	  FM = false;
+	  FullMoon = temkin;
+	}
+	if (!FM	&& drift < .5) {
+	  FM = true;
+	  Conjunc = temkin;
+	}
+	if (!SE	&& limitx == 3)	{
+	  SunEcl1 = temkin;
+	  SE = true;
+	}
+	if (SE && limitx != 3) {
+	  SunEcl0 = temkin;
+	  SE = false;
+	}
+	if (!ME	&& limitx == 4)	{
+	  MoonEcl1 = temkin;
+	  ME = true;
+	}
+	if (ME && limitx != 4) {
+	  MoonEcl0 = temkin;
+	  ME = false;
+	}
+	if (MV && MQ &&	MoonAzi	> angl[3])  MoonQibla =	temkin;
+	MQ = MoonAzi < angl[3];
+	if (MN && MoonAzi > 180) {
+	  MN = false;
+	  MoonZenith = temkin;
+	}
+	if (!MN	&& MoonAzi < 180) {
+	  MN = true;
+	  MoonNadir = temkin;
+	}
+	if (MR && MoonElev > -.5) {
+	  MR = false;
+	  MoonRise = temkin;
+	}
+	if (!MR	&& MoonElev < -.5) {
+	  MR = true;
+	  MoonSet = temkin;
+	}
+	if (MV && !MV0)	 CresVis1 = temkin;
+	if (!MV	&& MV0)	 CresVis0 = temkin;
+	MV0 = MV;
+      }
+      str = "";
+      if (SunEcl1	> -1)  str += "\nGüneş Tutulması Başlangıcı =  " + DispTime(SunEcl1);
+      if (Conjunc	> -1)  str += "\nKavuşum Zamanı =  " + DispTime(Conjunc);
+      if (SunEcl0	> -1)  str += "\nGüneş Tutulması Bitişi =  " + DispTime(SunEcl0);
+      if (MoonEcl1	> -1)  str += "\nAy Tutulması Başlangıcı =  " +	DispTime(MoonEcl1);
+      if (FullMoon	> -1)  str += "\nDolunay Zamanı =  " + DispTime(FullMoon);
+      if (MoonEcl0	> -1)  str += "\nAy Tutulması Bitişi =  " + DispTime(MoonEcl0);
+      if (MoonQibla	> -1)  str += "\n\nAy Kıble Saati =  " + DispTime(MoonQibla);
+      if (MoonZenith	> -1)  str += "\n\nAy Tepe Vakti =  " +	DispTime(MoonZenith);
+      if (MoonNadir	> -1)  str += "\nAy Dip Vakti =  " + DispTime(MoonNadir);
+      if (MoonRise	> -1)  str += "\n\nAy Doğuş Vakti =  " + DispTime(MoonRise);
+      if (MoonSet	> -1)  str += "\nAy Batış Vakti =  " + DispTime(MoonSet);
+      if (CresVis1	> -1)  str += "\n\nAy Görünürlük Başlangıcı =  " + DispTime(CresVis1);
+      if (CresVis0	> -1)  str += "\nAy Görünürlük Bitişi =  " + DispTime(CresVis0);
+      document.getElementById("moonDataOutput").innerHTML = "<pre>" + str + "</pre>";
+    }
+
+    function Hday() {
+      hday = -1;
+      k	= 0;
+      j	= jd;
+      do {
+	hday +=	floor(k/15 + 1);
+	jd = j - hday;
+	if (CresMode) {
+	  Alperen(1);
+	  temkin += beta;
+	  if (CresMode > 1) {
+	    --jd;
+	    Alperen(9);
+	    if (CresMode == 4) {
+	      Alperen(10);
+	      temkin +=	beta;
+	    }
+	    else  temkin = (1440 + imsak1 - aksam1) / CresMode + aksam1;
+	  }
+	  temkin += lzt();
+	}
+	else  temkin = LocalTime;
+	Moon();
+	k = drift*360 -	acos(cos(8*RPD)	/ cos(BetaM)) /	RPD;
+	if (k <	0)  k += 360;
+      }	 while (!hday || k < 180);
+      hyear = jd / 29.53058868 + 17049.3;
+      jd = j;
+      hmon  = floor(hyear % 12 + 1);
+      hyear = floor(hyear / 12);
+      return  hday;
+    }
+
+    function HolyDay() {
+      ++jd;
+      hday = Hday();
+      --jd;
+      switch (hmon) {
+      case 1:
+	switch (hday) {
+	case 2:
+	  return "Hicri Yılbaşı";
+	case 11:
+	 return	"Aşure Günü";
+	}
+	break;
+      case 3:
+      switch (hday) {
+	case 12:
+	  return "Mevlid Gecesi";
+      }
+      break;
+      case 7:
+	if (hday < 8 &&	DayOfWeek() == 4)  return "Regaib Gecesi";
+	else  switch (hday) {
+	case 2:
+	  return "Üç Ayların Başlangıcı";
+	case 27:
+	  return "Mirac Gecesi";
+	}
+	break;
+      case 8:
+      switch (hday) {
+      case 15:
+	return "Berat Gecesi";
+      }
+      break;
+      case 9:
+	if (DayOfWeek()	== 6 &&	(hday &	1) && hday > 16)
+	  return "Kadir Gecesi (Şarani)";
+	else  switch (hday) {
+	case 2:
+	  return "Ramazan'ın ilk günü";
+	case 27:
+	  return "Kadir Gecesi";
+	}
+	break;
+      case 10:
+	switch (hday) {
+	case 2:
+	case 3:
+	case 4:
+	  return "Ramazan Bayramı";
+	}
+	break;
+      case 12:
+	switch (hday) {
+	case 10:
+	  return "Arefe";
+	case 11:
+	case 12:
+	case 13:
+	case 14:
+	  return "Kurban Bayramı";
+	}
+      }
+      return "";
+    }
+
+
+    function GetId(id) { return	 document.getElementById(id); }
+
+    function GetVal(id)	{ return  GetId(id).value; }
+
+    function SetVal(id,	val) { GetId(id).value = val; }
+
+    function HTML(id, val) { GetId(id).innerHTML = val;	}
+
+    function getCookie(cname) {
+      name = cname + "=";
+      ca = decodeURIComponent(document.cookie).split(';');
+      for(i=0; i<ca.length; ++i) {
+	ck = ca[i];
+	while (ck.charAt(0) == ' ')  ck	= ck.substring(1);
+	if (!ck.indexOf(name))
+	  return  SetVal(cname,	ck.substring(name.length, ck.length));
+      }
+      return  cname == "mode" ?	4 : 1;
+    }
+
+    function LoadCookie() {
+      getCookie("lat");
+      getCookie("lon");
+      getCookie("tzone");
+      getCookie("fajr");
+      getCookie("isha");
+      GetId("algo").selectedIndex = getCookie("mode");
+      GetId("halgo").selectedIndex = getCookie("hmode");
+      for (j=0;	j<10; ++j)  getCookie("tmkn" + j);
+    }
+
+    function putCookie(cname) {
+      document.cookie =	cname  + "=" + GetVal(cname) + ";expires=Fri, 31 Dec 2099 23:59:59 UTC;path=/";
+    }
+
+    function SaveCookie() {
+      putCookie("lat");
+      putCookie("lon");
+      putCookie("tzone");
+      putCookie("fajr");
+      putCookie("isha");
+      SetVal("mode", GetId("algo").selectedIndex);
+      putCookie("mode");
+      SetVal("hmode", GetId("halgo").selectedIndex);
+      putCookie("hmode");
+      for (i=0;	i<10; ++i)  putCookie("tmkn" + i);
+    }
+
+    function Visible(id, vis) {	GetId(id).style.visibility = vis ? "visible" : "hidden"; }
+
+    function Map() {
+      Visible("zoom", isChecked("map1"));
+      if (Canvas("map"))  cv.src = "https://maps.google.com/maps?size=800x400&hl=tr&q="	+ phi/RPD + ","	+ lon +	"&z=" +	GetVal("zoom") + "&output=embed";
+    }
+
+    function isChecked(id) { return  GetId(id).checked;	}
+
+    function DispTime(clk) {
+      if (clk <	0)  return "";
+      str1 = floor(clk / 60).toString();
+      if (str1.length == 1)  str1 = "0"	+ str1;
+      str2 = floor(clk % 60).toString();
+      if (str2.length == 1)  str2 = "0"	+ str2;
+      return  str1 + ":" + str2;
+    }
+
+    function Pixel(x, y, r, g, b) {
+      p	= 4*((y|0)*cv.width+(x|0));
+      imgData.data[p] =	r;
+      imgData.data[p+1]	= g;
+      imgData.data[p+2]	= b;
+      imgData.data[p+3]	= 255;
+    }
+
+    function showXY(event) {
+      HTML("coor", "Enlem = " +	(90-(event.offsetY+1)/cv.height*180).toFixed(1)
+	   + "°   ;   Boylam = " + ((event.offsetX+1)/cv.width*360-180).toFixed(1) + "°");
+    }
+
+    function clearXY() {
+      HTML("coor", "&nbsp");
+    }
+
+    function Trajectory(a, b) {
+      x	= ((cos(.17)*cos(a)-sin(.17)*sin(a))*cos(b)+1.4)*266;
+      y	= ((sin(.17)*cos(b)*sin(a)-cos(.17)*sin(b))*.8+1)*200;
+    }
+
+    function Canvas(id)	{
+      cv = GetId(id);
+      c	= isChecked(id + "1");
+      cv.width	= c ? 800 : 0;
+      cv.height	= c ? 400 : 0;
+      if (cv.nodeName == "CANVAS")  ctx	= cv.getContext("2d");
+      return  c;
+    }
+
+    function MapEarth()	{
+      img = GetId("earth0");
+      x1 = img.width;
+      y1 = img.height;
+      ctx.drawImage(img, 0, 0);
+      imgData =	ctx.getImageData(0, 0, x1, y1);
+      temkin = AlpClk;
+      Sun();
+    }
+
+    function Stroke(f) {
+      ctx.closePath();
+      f	? ctx.fill() : ctx.stroke();
+      ctx.beginPath();
+    }
+
+    var	 exp=Math.exp, O1=5e-5,	O2=5e-5, O3=5e-6, R1=.04, R2=.09, R3=.25;
+
+    function PanoRendo(show) {
+      O	= sin(angl[10]/2);
+      if (phi >	0)  O =	250+50*sin(1.3*phi)*sin(1.3*phi)*(4-3*O*O);
+      else  O =	250+50*sin(1.5*phi)*sin(1.5*phi)*(1+2*O*O);
+      MZ = angl[6]*RPD;
+      MA = angl[2]*RPD;
+      SE = (90-angl[5])*RPD;
+      SA = angl[1]*RPD;
+      H	 = alti/1000;
+      T	 = GetVal("Turbi");
+      T	*= T/12;
+      B	 = GetVal("Luma");
+      B	*= B*3.6;
+      EH = acos(6371/(6371+H));
+      x1 = cv.width;
+      y1 = 200;
+      if (show)	{
+	cv.height = y2 = y1*(1+2*EH/PI);
+	imgData	= ctx.createImageData(x1, y2);
+      }
+      else  y2 = 999;
+      cosS = sin(SE);
+      sinS = cos(SE);
+      HS = cosS	> 0 ? H	: H-6371*(1-sinS);
+      RS = 500*cosS;
+      RS = min((sqrt(RS*RS+1001)-RS)*exp(-HS/8.4),75);
+      MS = 1500*cosS;
+      MS = min((sqrt(MS*MS+3001)-MS)*exp(-HS/1.2),200);
+      OS = 125*cosS;
+      OS = min((sqrt(OS*OS+251)-OS)*exp(-HS/40),25)*O;
+      W1 = .03*max(-HS,0);
+      W2 = .03*W1*W1;
+      M2 = .06*(T-2+1/T);
+      MH = M2*exp(-H/1.2);
+      d	 = .94*exp(-MH);
+      g	 = d*exp(-.02*MS);
+      g2 = g*g;
+      c	 = .89-.11*g;
+      M1 = M2*c;
+      M3 = M2/c;
+      R	 = 42/(3+d);
+      MP0 = 2.7*(1-g2)/(3+d+2*d*g2);
+      A0 = 8000/max(MH,.001)/d;
+      V0 = SE-EH-RPD;
+      V1 = (1+20*EH)/60;
+      for (y=0;	y<y2; ++y) {
+	VE = (1-y/y1)*PI/2;
+	cosV = sin(VE);
+	sinV = cos(VE);
+	sinSV =	sinS*sinV;
+	cosSV =	cosS*cosV;
+	HV = cosV > 0 ?	H : H-6371*(1-sinV);
+	RV = 500*cosV;
+	RV = (sqrt(RV*RV+1001)-RV)*exp(-HV/8.4);
+	MV = 1500*cosV;
+	MV = (sqrt(MV*MV+3001)-MV)*exp(-HV/1.2);
+	R0 = sqrt(RV*RS);
+	M0 = sqrt(MV*MS);
+	S1 = (1-exp(-R1*RV-M1*MV))/(7*R1*RV+M1*MV)*exp(-O1*OS-W1/RV-W2);
+	S2 = (1-exp(-R2*RV-M2*MV))/(7*R2*RV+M2*MV)*exp(-O2*OS-W1/RV-W2);
+	S3 = (1-exp(-R3*RV-M3*MV))/(7*R3*RV+M3*MV)*exp(-O3*OS-W1/RV-W2);
+	RS1 = R*R1*RV*S1/(2+R1*R0);
+	RS2 = R*R2*RV*S2/(2+R2*R0);
+	RS3 = R*R3*RV*S3/(2+R3*R0);
+	if (!y)	{
+	  Z1 = RS1;
+	  Z2 = RS2;
+	  Z3 = RS3;
+	  if (!show) {
+	    y =	2/PI*MZ*y1-1;
+	    continue;
+	  }
+	}
+	MS1 = M1*MV*S1*exp(-M1*M0/6);
+	MS2 = M2*MV*S2*exp(-M2*M0/6);
+	MS3 = M3*MV*S3*exp(-M3*M0/6);
+	A1 = exp(-O1*OS-M1*MV/6)*2/(2+R1*RV);
+	A2 = exp(-O2*OS-M2*MV/6)*2/(2+R2*RV);
+	A3 = exp(-O3*OS-M3*MV/6)*2/(2+R3*RV);
+	V2 = V1*sin(VE+EH+RPD)/(V0 < 0 ? 1-cos(V0) : 0);
+	x2 = 2*PI/x1;
+	for (x=show?0:MA/x2; x<x1; ++x)	{
+	  VA = x*x2;
+	  G  = sinSV*cos(VA-SA)+cosSV;
+	  P  = 1+(G > 0	? d : g)*G*G;
+	  MP = 1+g2-2*g*G;
+	  MP = MP0/MP/sqrt(MP);
+	  V  = 1+1/max(V2+G,0);
+	  A  = A0*(1-G)+.01;
+	  I1 = max((max(RS1/V,Z1)+MP*(MS1+A1/A))*P,.005);
+	  I2 = max((max(RS2/V,Z2)+MP*(MS2+A2/A))*P,.009);
+	  I3 = max((max(RS3/V,Z3)+MP*(MS3+A3/A))*P,.007);
+	  if (!show) {
+	    OV = 125*cosV;
+	    OV = (sqrt(OV*OV+251)-OV)*exp(-HV/40)*O;
+	    Y1 = exp(-O1*OV-M1*MV-R1*RV);
+	    Y2 = exp(-O2*OV-M2*MV-R2*RV);
+	    Y3 = exp(-O3*OV-M3*MV-R3*RV);
+	    W3 = 2*exp(-0.04*RS-2*W1)+0.00001;
+	    I1 = I1*W3;
+	    I2 = I2*W3;
+	    I3 = I3*W3;
+	    return;
+	  }
+	  Pixel(x, y, I1/(1+I1)*B, I2/(1+I2)*B,	I3/(1+I3)*B);
+	}
+      }
+      Pixel(MA/x2, 2/PI*MZ*y1, 255, 255, 255);
+      ctx.putImageData(imgData,	0, 0);
+    }
+
+    function Graph(multi) {
+      cv = GetId("dash");
+      c	= loc.checked;
+      cv.width	= c ? 800 : 0;
+      cv.height	= c ? 400 : 0;
+      Visible("db", c);
+      if (c) {
+	ctx = cv.getContext("2d");
+	ctx.clearRect(0, 0, cv.width, cv.height);
+	ctx.textAlign =	"center";
+	ctx.lineWidth =	2;
+	Tacho(400,200,160,-225,	45,20,	 0, spd	< 60 ? 200 : 1000, spd*3.6, "Hız");
+	Tacho(110,105, 80,-225,	45,20,	 0, alti < 2200	? 2 : 10, alti/1000, "Rakım");
+	Tacho(110,315, 80,-225,	45,20, -20, 20,	tilt, "Eğim");
+	Tacho(690,105, 80,-270,	90,16,-180,180,-head, "Pusula");
+	Tacho(690,315, 80,-150,-30, 8,	-8,  8,	acc1, "İvme");
+	Tacho(690,315, 80, 150,	30, 8,	-8,  8,	acc2, "");
+	ctx.font = "12px Courier New";
+	ctx.fillText((alti * 3.281).toFixed() +	" ft", 110, 170);
+	ctx.fillText((spd * 2.237).toFixed() + " mph", 400, 300);
+	ctx.fillText(dist.toFixed(1) + " km", 400, 320);
+	ctx.fillText((dist * .6214).toFixed(1) + " mi",	400, 340);
+	q = min(acc/5, 9).toFixed();
+	ctx.fillStyle =	"#" + q	+ (9-q)	+ "0";
+	ctx.arc(530, 370, 7, 0,	360 *RPD);
+	Stroke(1);
+	ctx.fillStyle =	led & 1	? "#077" : "#033";
+	ctx.arc(270, 370, 7, 0,	360 *RPD);
+	Stroke(1);
+      }
+      if (Canvas("angles")) {
+	txt = [	"KUZEY","GÜNEŞ","AY","KIBLE","UFUK" ];
+	rgb = [	"red","yellow","blue","green","purple","yellow","blue" ];
+	angl[0]	= 0;
+	angl[4]	= 90+Elev2;
+	ctx.clearRect(0, 0, cv.width, cv.height);
+	ctx.font = "14px Arial";
+	ctx.strokeStyle	= ctx.fillStyle	= "LightGray";
+	ctx.lineWidth =	2;
+	ctx.beginPath();
+	ctx.fillText("DİKEY", 220, 30);
+	ctx.fillText("YATAY", 578, 30);
+	ctx.moveTo(220,	50);
+	ctx.arc(220, 200, 150, -90 *RPD, 90 *RPD);
+	ctx.moveTo(750,	200);
+	ctx.arc(600, 200, 150, 0, 360 *RPD);
+	Stroke(0);
+	for (i=0; i<5; ++i) {
+	  j = 120 + i *	40;
+	  ctx.fillText(txt[i], 100, j +	6);
+	  ctx.strokeStyle = rgb[i];
+	  ctx.moveTo(30, j);
+	  ctx.lineTo(80, j);
+	  Stroke(0);
+	}
+	for (i=0; i<7; ++i) {
+	  ctx.setLineDash([]);
+	  a = angl[i];
+	  if (i	< 4) {
+	    x =	600;
+	    if (head !=	null) {
+	      a	-= head;
+	      ctx.setLineDash([10, 5]);
+	    }
+	  }
+	  else	x = 220;
+	  a *= RPD;
+	  ctx.beginPath();
+	  ctx.strokeStyle = rgb[i];
+	  ctx.moveTo(x,	200);
+	  ctx.lineTo(x+155*sin(a), 200-155*cos(a));
+	  Stroke(0);
+	}
+      }
+      if (!multi)  return;
+      pano = Canvas("rendo");
+      Visible("Turbi", pano);
+      Visible("Luma", pano);
+      if (pano)	 PanoRendo(1);
+      if (Canvas("moon")) {
+	if (multi == 2)	 sky = !sky;
+	uh = angl[6] > 90.5;
+	if (uh)	{ mc[0]	= .6;  mc[1] = .8;  mc[2] = 1; }
+	else {
+	  PanoRendo(0);
+	  q = max(sky?max(I1+Y1,I2+Y2,I3+Y3):Y1,.001);
+	  mc[0]	= Y1/q;
+	  mc[1]	= Y2/q;
+	  mc[2]	= Y3/q;
+	  bg[0]	= sqrt(I1/q)*255;
+	  bg[1]	= sqrt(I2/q)*255;
+	  bg[2]	= sqrt(I3/q)*255;
+	}
+	if (!sky || uh)	 bg[0] = bg[1] = bg[2] = 0;
+	img = GetId("moon0");
+	b = angl[7]*2*PI;
+	if (sky) {
+	  cv.height = 800;
+	  ctx.fillStyle	= "rgb("+bg[0].toFixed()+","+bg[1].toFixed()+","+bg[2].toFixed()+")";
+	  ctx.fillRect(0, 0, cv.width, cv.height);
+	}
+	x1 = img.width;
+	y1 = img.height;
+	x0 = (cv.width-x1)/2;
+	y0 = (cv.height-y1)/2;
+	ctx.drawImage(img, x0, y0);
+	imgData	= ctx.getImageData(x0, y0, x1, y1);
+	s = (1-abs(cos(b)))*img.width/4;
+	n = (1+cos(b))/16;
+	m = b >	PI;
+	for (y=0; y<y1;	y++) {
+	  a = asin(y*2/y1-1);
+	  a = (1+(cos(m	? a-PI : a)-sin(a)*sin(b)*sin(angl[8]))*cos(b))*x1/2;
+	  for (x=0; x<x1; x++) {
+	    z =	m ? x-a	: a-x;
+	    if (z > 0)	k = n;
+	    else if (z < -s)  k	= 1;
+	    else  k = (n-1)*z/s+n;
+	    xy = 4*(y*x1+x);
+	    for	(j=0; j<3; j++)	{
+	      px = imgData.data[xy]*k;
+	      imgData.data[xy++] = sqrt(px*px*mc[j]+bg[j]*bg[j]);
+	    }
+	  }
+	}
+	ctx.putImageData(imgData, x0, y0);
+	ctx.translate(cv.width/2, cv.height/2);
+	q = (angl[1]-angl[2])*RPD;
+	q = atan2(cos(angl[6]*RPD)*cos(q) - sin(angl[6]*RPD)/tan(angl[5]*RPD), sin(q));
+	if (angl[7] >	.5)  q += PI;
+	q -= atan(sin(angl[8])/tan(angl[7]*2*PI));
+	ctx.rotate(q);
+	ctx1 = ctx;
+	img1 = new Image();
+	sc = sky ? 415 / angl[9] : 1;
+	img1.onload =	function() {
+	  ctx1.drawImage(img1, -img1.width*sc/2, -img1.height*sc/2, img1.width*sc, img1.height*sc);
+	}
+	img1.src = cv.toDataURL("image/bmp");
+      }
+      if (Canvas("traject")) {
+	ctx.font = "14px Arial";
+	ctx.strokeStyle	= ctx.fillStyle	= "green";
+	ctx.lineWidth =	2;
+	imgData	= ctx.createImageData(cv.width,	cv.height);
+	for (temkin=0; temkin<1440; ++temkin) {
+	  a = cos(.17)*cos(temkin*RPD/4);
+	  b = sin(.17)*sin(temkin*RPD/4);
+	  Pixel((a-b+1.4)*266, (b*.8+1)*200, 128, 128, 128);
+	  Sun();
+	  Trajectory(azimuth(delta) *RPD, SunElev *RPD);
+	  SunElev > 0 ?	Pixel(x, y, 255, 255, 0) : Pixel(x, y, 255, 0, 255);
+	  if (temkin ==	round(AlpClk)) {
+	    x0 = x;
+	    y0 = y;
+	  }
+	  Moon();
+	  Trajectory(MoonAzi *RPD, MoonElev *RPD);
+	  MoonElev > 0 ? Pixel(x, y, 0,	255, 255) : Pixel(x, y,	0, 0, 255);
+	  if (temkin ==	round(AlpClk)) {
+	    x1 = x;
+	    y1 = y;
+	  }
+	}
+	ctx.putImageData(imgData, 0, 0);
+	ctx.beginPath();
+	ctx.moveTo(372,	200);
+	ctx.lineTo(635,	200);
+	ctx.fillText("KUZEY", 666, 206);
+	Stroke(0);
+	ctx.fillStyle =	"yellow";
+	ctx.arc(x0, y0,	7, 0, 360 *RPD);
+	Stroke(1);
+	ctx.fillStyle =	"gray";
+	ctx.arc(x1, y1,	7, 0, 360 *RPD);
+	Stroke(1);
+      }
+      if (Canvas("globe")) {
+	MapEarth();
+	k = x1 * ((beta	> 0 ? 1.75 : 1.25) - (temkin - LocalTime - drift) / 1440);
+	imgData1 = imgData;
+	imgData	= ctx.createImageData(cv.width,	cv.height);
+	for (y=0; y<y1;	++y) {
+	  a = 2*y/y1-1;
+	  b = cos(asin(a));
+	  z = -a * sin(delta)/2;
+	  w = sin(18 * RPD)/cos(delta)/2;
+	  for (x=0; x<y1; ++x) {
+	    c =	x / y1 - .5;
+	    if (abs(c /	b) > .5)  c = 0;
+	    else {
+	      j	= imgData1.data[4*((y1*(asin(a)/PI+.5)|0)*x1
+		  + ((x1*asin(2*c/b)/PI/2+k))%x1|0)];
+	      if (beta <= 0)  c	= - c;
+	      if (c < z)  c = 1;
+	      else if (c > w + z)  c =	4;
+	      else  c =	1 + 3 /	w * (c - z);
+	      c	= 255 /	c;
+	    }
+	    Pixel(x+(cv.width-y1)/2, y+(cv.height-y1)/2, 0, j ?	c : 0, c);
+	  }
+	}
+	ctx.putImageData(imgData, 0, 0);
+	ctx.translate(cv.width/2, cv.height/2);
+	ctx.rotate(beta	< 0 ? delta : -delta);
+	ctx2 = ctx;
+	img2 = new Image();
+	img2.onload = function() {
+	  ctx2.drawImage(img2, -img2.width/2, -img2.height/2);
+	}
+	img2.src = cv.toDataURL("image/bmp");
+      }
+      if (Canvas("earth")) {
+	MapEarth();
+	j = lha()-lon*4;
+	z = round((2.5-j/1440)*x1 % x1);
+	count =	0;
+	for (y=0; y<y1;	++y) {
+	  beta = (.5-y/y1)*PI;
+	  a = abs(tan(beta-delta));
+	  asr1 = sin(atan2(1,-1-a));
+	  asr2 = sin(atan2(1,-2-a));
+	  a = sin(delta) * sin(beta);
+	  b = cos(delta) * cos(beta);
+	  istiva = round((z-count/4+x1)	% x1);
+	  count	= c1 = 0;
+	  for (x=0; x<x1; x++) {
+	    p =	4*(y*x1+x);
+	    k =	imgData.data[p]	> 128;
+	    c =	cos((j + (x/x1-.5)*1440)*RPD/4)*b+a;
+	    if (istiva != z && x == istiva && c	> sin((DEPR_ISRAK+DEPR_ISFIRAR)/2*RPD))	{
+	      Pixel(x, y, 128, 0, 192);
+	      continue;
+	    }
+	    if (x == z)	{
+	      Pixel(x, y, 192, 192, 192);
+	      continue;
+	    }
+	    if (c1 > asr1 && c < asr1) {
+	      c1 = c;
+	      Pixel(x, y, 0, 255, 0);
+	      continue;
+	    }
+	    if (c1 > asr2 && c < asr2) {
+	      c1 = c;
+	      Pixel(x, y, 0, 192, 0);
+	      continue;
+	    }
+	    c1 = c;
+	    if (c > sin((DEPR_ISRAK+DEPR_ISFIRAR)/2*RPD))
+	      k	? Pixel(x, y, 128, 128,	64) : Pixel(x, y, 255, 255, 128);
+	    else if (c > sin((DEPR_AKSAM+DEPR_GUNES)/2*RPD))
+	      k	? Pixel(x, y, 128, 64, 0) : Pixel(x, y,	255, 128, 0);
+	    else if (c > sin((depr_imsak+depr_yatsi)/2*RPD)) {
+	      k	? Pixel(x, y, 0, 0, 128) : Pixel(x, y, 0, 0, 255);
+	      ++count;
+	    }
+	    else  k ? Pixel(x, y, 0, 0,	0) : Pixel(x, y, 64, 64, 64);
+	  }
+	}
+	Pixel((.5+lon/360)*x1, (.5-phi/PI)*y1, 255, 0, 0);
+	ctx.putImageData(imgData, 0, 0);
+      }
+    }
+
+    function Update() {
+      phi = GetVal("lat") * RPD;
+      lon = GetVal("lon");
+      if (abs(phi-phi0)	> .01*RPD || abs(lon-lon0) > .01) {
+	phi0 = phi;
+	lon0 = lon;
+	Map();
+	return	true;
+      }
+      return  false;
+    }
+
+    function Tacho(x, y, r, a, b, c, a1, b1, c1, l) {
+      ctx.font = (r/10).toFixed() + "px Arial";
+      ctx.fillStyle = "LightGray";
+      ctx.lineWidth = 2;
+      if (l.length) {
+	ctx.fillText(l,	x, y-r*1.14);
+	ctx.fillStyle =	"#002";
+	ctx.beginPath();
+	ctx.arc(x, y, r, 0, 360	*RPD);
+	Stroke(1);
+      }
+      ctx.strokeStyle =	ctx.fillStyle =	"LightGray";
+      for (i=0;	i<=c; ++i) {
+	j = (a+i*(b-a)/c) *RPD;
+	jx = cos(j);
+	jy = sin(j);
+	s = i %	2 ? r*.91 : r*.82;
+	ctx.moveTo(x+s*jx, y+s*jy);
+	ctx.lineTo(x+r*jx, y+r*jy);
+	Stroke(0);
+	if (i %	2)  continue;
+	if (i || b-a<360)  ctx.fillText(a1+(b1-a1)*i/c,	x+(r*.66)*jx, y+(r*.66)*jy);
+	Stroke(0);
+      }
+      ctx.strokeStyle =	"Red";
+      j	= (a+(b-a)*(c1-a1)/(b1-a1)) *RPD;
+      ctx.moveTo(x, y);
+      ctx.lineTo(x+r*cos(j), y+r*sin(j));
+      Stroke(0);
+      ctx.fillStyle = "LightGray";
+      ctx.arc(x, y, 15,	0, 360 *RPD);
+      Stroke(1);
+    }
+
+    function LOC_OK(pos) {
+      ++led;
+      xyz = pos.coords;
+      acc = xyz.accuracy;
+      SetVal("lat", xyz.latitude);
+      SetVal("lon", xyz.longitude);
+      spd0 = xyz.speed - spd;
+      spd = xyz.speed;
+      if (xyz.heading != null) {
+	acc1 = spd * (xyz.heading - head) * RPD;
+	head = xyz.heading;
+      }
+      else  acc1 = 0;
+      if (xyz.altitude != null)	{
+	alti = xyz.altitude;
+	if (alti0 == null)  alti0 = alti;
+	if (dist1 > .5)	{
+	  tilt = (alti - alti0)	/ dist1	/ 10;
+	  alti0	= alti;
+	  dist1	= 0;
+	}
+      }
+      Elev1 = alti > 0 ? acos(6371000 /	(6371000 + alti)) / RPD	: 0;
+      Elev2 = alti > 2000 ? acos(6371000 / (6371000 + alti-2000)) / RPD	: 0;
+      dist0 = (Date.now() - d0)	/ 1000;
+      d0 = Date.now();
+      acc2 = spd0 / dist0;
+      dist0 *= spd / 1000;
+      dist  += dist0;
+      dist1 += dist0;
+      HTML("speed", spd	!= null	? "Hız = " + (spd*3.6).toFixed() + " km/h" : "");
+      HTML("head", xyz.heading != null ? "Yön = " + xyz.heading.toFixed() + "°"	: "");
+      HTML("alti", xyz.altitude	!= null	? "Rakım = " + xyz.altitude.toFixed() +	" m" : "");
+      HTML("acc", "± " + acc.toFixed() + " m");
+      if (Update())  Astro();
+      else  Graph(0);
+    }
+
+    function ClearGPS()	{
+      HTML("speed", "");
+      HTML("head", "");
+      HTML("alti", "");
+      HTML("acc", "");
+      alti0 = head = spd = dist	= acc1 = acc2 =	tilt = led = null;
+      d0 = Date.now();
+      acc = 99;
+      Graph(0);
+    }
+
+    var	xhr = new XMLHttpRequest();
+
+    xhr.onreadystatechange = function()	{
+      if (this.readyState == 4 && this.status == 200) {
+	res = JSON.parse(this.responseText);
+	if(res.status == "success") {
+	    SetVal("lat", res.lat);
+	    SetVal("lon", res.lon);
+	    HTML("speed", res.query);
+	    HTML("head", res.city);
+	    HTML("alti", res.country);
+	    HTML("acc",	res.countryCode	+ "-" +res.region);
+	    if (Update())  Astro();
+	    else  Graph(0);
+	}
+      }
+    };
+
+    function LOC_err(err) {
+      if (err.code == err.PERMISSION_DENIED || err.code	== err.POSITION_UNAVAILABLE) {
+	xhr.open("GET",	"http://ip-api.com/json", true);
+	xhr.send();
+	loc.checked = false;
+	GPS();
+      }
+      else  ClearGPS();
+    }
+
+    function GPS() {
+      if (GetId("lat").disabled	= GetId("lon").disabled	= loc.checked)
+	wID = geo.watchPosition(LOC_OK,	LOC_err, { enableHighAccuracy:true, maximumAge:600000, timeout:30000 });
+      else {
+	geo.clearWatch(wID);
+	ClearGPS();
+      }
+    }
+
+    var	 sin=Math.sin, cos=Math.cos, tan=Math.tan, asin=Math.asin, acos=Math.acos, atan=Math.atan, round=Math.round,
+	 atan2=Math.atan2, sqrt=Math.sqrt, abs=Math.abs, floor=Math.floor, min=Math.min, max=Math.max,
+	 PI=Math.PI, RPD=PI/180, init=true;
+
+    var	tmr, angl=[], RPD=PI/180, AlpClk, phi, lon, phi0=0, lon0=0, dist1=0, alti=0, Elev1=0, Elev2=0,
+	vkt = [	"imsak","gunes","israk","istiva","ogle","ikindi","asr_2","isfirar","aksam","yatsi" ],
+	mon = [	"","Muharrem","Safer","Rebiülevvel","Rebiülahir","Cemaziyelevvel","Cemaziyelahir",
+		"Recep","Şaban","Ramazan","Şevval","Zilkade","Zilhicce"	],
+	day = [	"","Pazartesi","Salı","Çarşamba","Perşembe","Cuma","Cumartesi","Pazar" ];
+
+
+    function Astro() {
+      if (init)	{
+	init = sky = false;
+	LoadCookie();
+	loc = GetId("loc");
+	loc.disabled = !(geo = navigator.geolocation);
+	ClearGPS();
+      }
+      if (GetId("dt").disabled = isChecked("rt")) {
+	d = new	Date();
+	d.setTime(d.getTime() -	d.getTimezoneOffset() *	60000);
+	SetVal("dt", d.toISOString ? d.toISOString().substr(0,16) : d.toUTCString());
+	window.setTimeout("Astro()", 60200 - d.getTime() % 60000);
+      }
+      else {
+	str = GetVal("dt");
+	if (d.toISOString)  str	= str.substr(0,16) + ":00Z";
+	d1 = new Date(str);
+	if (isNaN(d1.getTime()))  document.getElementById("dt").focus();
+	else  d	= d1;
+      }
+      if (GetId("tzone").disabled = isChecked("tz"))  SetVal("tzone", (-d.getTimezoneOffset()/60).toFixed(2));
+
+      AlpClk = d.getTime() / 86400000;
+      jd = floor(AlpClk	- 10957);
+      AlpClk = (AlpClk - floor(AlpClk))	* 1440;
+      AlpMode =	GetId("algo").selectedIndex;
+      CresMode = GetId("halgo").selectedIndex;
+      LocalTime	= GetVal("tzone")*60;
+      depr_imsak = GetVal("fajr")*1;
+      depr_yatsi = GetVal("isha")*1;
+      Update();
+      tmkn = [];
+      mc   = [];
+      bg   = [];
+
+      beta = 0;
+      drift = 720;
+
+      E_KABE = .373893			/* 21.4225 N */;
+      B_KABE = .695098			/* 39.8262 E */;
+
+      DEPR_GUNES = -1; DEPR_ISRAK = 5; DEPR_ISFIRAR = 5; DEPR_AKSAM = -1;
+
+	compute();
+
+	var vakitDakika = [];
+
+	for (i=0; i<10; ++i) {
+	  tmkn[i+1] = Number(GetVal("tmkn" + i));
+	  vakitDakika[i] = Alperen(i+1);
+	  HTML(vkt[i], (i % 4 < 2 ? "<b>" : "") + DispTime(vakitDakika[i]));
+	}
+
+
+// ?? SEHER HESABI
+var imsakDakika = vakitDakika[0];   // imsak
+var aksamDakika = vakitDakika[8];   // aksam
+
+var geceSuresi;
+
+if (imsakDakika <= aksamDakika)
+  geceSuresi = (1440 - aksamDakika) + imsakDakika;
+else
+  geceSuresi = imsakDakika - aksamDakika;
+
+var seherDakika = imsakDakika - (geceSuresi / 6);
+
+if (seherDakika < 0)
+  seherDakika += 1440;
+
+HTML("seher", DispTime(seherDakika));
+
+
+
+      HTML("qiblatime",	DispTime(QiblaTime()));
+      angl[3] =	QiblaDir();
+      HTML("qibla", angl[3].toFixed(1) + "°");
+      temkin = AlpClk;
+      Sun();
+      slong %= 2*PI;
+      angl[10]=	slong;
+      angl[1] =	azimuth(delta);
+      HTML("sunazi", angl[1].toFixed(1)	+ "°");
+      angl[5] =	90 - SunElev;
+      HTML("sunelev", SunElev.toFixed(1) + "°");
+      HTML("sunlong", (slong / RPD).toFixed(1) + "°");
+      HTML("sDecl", (delta / RPD).toFixed(1) + "°");
+      HTML("EoT", (720 - drift).toFixed(1) + "'");
+      Moon();
+      angl[2] =	MoonAzi;
+      angl[6] =	90 - MoonElev;
+      angl[7] =	drift;
+      angl[8] =	BetaM;
+      angl[9] =	MoonDist;
+      switch (limitx) {
+      case 1:
+	HTML("moonvis",	"Ay ufkun altında");
+	HTML("mvis", "");
+	break;
+      case 2:
+	HTML("moonvis",	"Ay Görünürlüğü");
+	HTML("mvis", delta.toFixed(1));
+	break;
+      case 3:
+	HTML("moonvis",	"<b>Güneş Tutulması");
+	HTML("mvis", "% " + (delta * 100).toFixed(1));
+	break;
+      case 4:
+	HTML("moonvis",	"<b>Ay Tutulması");
+	HTML("mvis", "% " + (delta * 100).toFixed(1));
+	break;
+      default:	
+	HTML("moonvis",	"");
+	HTML("mvis", "");
+      }
+      HTML("moonphase",	(drift * 360).toFixed(1) + "°");
+      HTML("moonazi", MoonAzi.toFixed(1) + "°");
+      HTML("moonelev", MoonElev.toFixed(1) + "°");
+      HTML("moondecl", (BetaM /	RPD).toFixed(1)	+ "°");
+      HTML("moonelong",	(elong / RPD).toFixed(1) + "°");
+      HTML("moonillum",	"% " + (M * 100).toFixed(1));
+      HTML("creswidth",	slong.toFixed(1) + "'");
+      HTML("moondist", MoonDist.toFixed(1) + " Mm");
+      HTML("moondist0",	MoonDist0.toFixed(1) + " Mm");
+      HTML("sundist", beta.toFixed(1) +	" Gm");
+      HTML("hicri", Hday() + " " + mon[hmon] + " " + hyear);
+      HTML("gun", day[DayOfWeek()]);
+      HTML("dini", "<b><i>" + HolyDay());
+
+MoonData(); // Diğer Ay Verileri otomatik gösterilsin
+
+      clearTimeout(tmr);
+      tmr = setTimeout("Graph(1)", 1000);
+    }
+
+function AddOneDay() {
+  let dtInput = document.getElementById("dt");
+  let current = new Date(dtInput.value);
+  if (isNaN(current.getTime())) return;
+
+  current.setDate(current.getDate() + 1); // 1 gün ekle
+
+  // yyyy-MM-ddTHH:mm formatında tekrar yaz
+  let yyyy = current.getFullYear();
+  let MM = String(current.getMonth() + 1).padStart(2, '0');
+  let dd = String(current.getDate()).padStart(2, '0');
+  let HH = String(current.getHours()).padStart(2, '0');
+  let mm = String(current.getMinutes()).padStart(2, '0');
+
+  dtInput.value = `${yyyy}-${MM}-${dd}T${HH}:${mm}`;
+
+  Astro(); // Yeni tarihle hesaplamayı güncelle
+}
+
+
+async function ExportMultipleDays() {
+  const startDateStr = document.getElementById("dt").value.substring(0, 10);
+  const gunSayisi = parseInt(document.getElementById("gunSayisi").value);
+
+  if (!startDateStr || isNaN(gunSayisi) || gunSayisi <= 0) {
+    alert("Ayarlar tarihini ve gün sayısını kontrol edin.");
+    return;
+  }
+
+  const getText = (id) => (document.getElementById(id)?.innerText || "").trim();
+  const matchText = (pattern) => {
+    const match = document.getElementById("moonDataOutput")?.innerText.match(pattern);
+    return match ? match[1] : "";
+  };
+
+  const startDate = new Date(startDateStr);
+  const allRows = [];
+  const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+  for (let i = 0; i < gunSayisi; i++) {
+    const currentDate = new Date(startDate);
+    currentDate.setDate(startDate.getDate() + i);
+
+    const yyyy = currentDate.getFullYear();
+    const MM = String(currentDate.getMonth() + 1).padStart(2, '0');
+    const dd = String(currentDate.getDate()).padStart(2, '0');
+    const formattedDate = `${yyyy}-${MM}-${dd}T00:00`;
+
+    document.getElementById("rt").checked = false;
+    document.getElementById("dt").value = formattedDate;
+    Astro();
+
+    await delay(500);
+
+    const row = [
+      formattedDate.substring(0, 10),
+      getText("hicri"),
+      getText("imsak"), getText("gunes"), getText("israk"), getText("istiva"),
+      getText("ogle"), getText("ikindi"), getText("asr_2"), getText("isfirar"),
+      getText("aksam"), getText("yatsi"), getText("qiblatime"), getText("sunazi"),
+      getText("sunelev"), getText("EoT"),
+      matchText(/Ay Doğu[sş] Vakti\s*=\s*(\d\d:\d\d)/),
+      matchText(/Ay Bat[ıi]ş Vakti\s*=\s*(\d\d:\d\d)/),
+      matchText(/Dolunay Zamanı\s*=\s*(\d\d:\d\d)/),
+      matchText(/Kavuşum Zamanı\s*=\s*(\d\d:\d\d)/),
+      matchText(/Ay Tepe Vakti\s*=\s*(\d\d:\d\d)/),
+      matchText(/Ay Dip Vakti\s*=\s*(\d\d:\d\d)/),
+      getText("moonillum"), getText("moonphase"), getText("moonazi"), getText("moonelev"),
+      getText("moonelong"), getText("moondecl"), getText("creswidth"),
+      getText("moondist0"), getText("moondist"),
+      matchText(/Ay Görünürlük Başlang[ıı]c[ıi]\s*=\s*(\d\d:\d\d)/),
+      matchText(/Ay Görünürlük Bitiş[iı]\s*=\s*(\d\d:\d\d)/),
+      matchText(/Ay Tutulması Başlang[ıı]c[ıi]\s*=\s*(\d\d:\d\d)/),
+      matchText(/Ay Tutulması Bitişi\s*=\s*(\d\d:\d\d)/),
+      matchText(/Güneş Tutulması Başlang[ıı]c[ıi]\s*=\s*(\d\d:\d\d)/),
+      matchText(/Güneş Tutulması Bitiş[iı]\s*=\s*(\d\d:\d\d)/),
+      matchText(/Ay K[ıi]ble Saati\s*=\s*(\d\d:\d\d)/)
+    ];
+
+    allRows.push(row);
+  }
+
+  const csvContent = allRows.map(r => r.join(",")).join("\n");
+  const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(blob);
+  link.download = `Coklu_Gun_Astronomik_Veriler.csv`;
+  link.click();
+}
+
+
+  </script>
+  <noscript><TT><H1> >>> Lutfen	"Javascript" özelliğini	etkinleştiriniz..!</noscript>
+<style>
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  color: #e0e0e0;
+  background: #0f0f0f;
+  font-family: 'Segoe UI', Arial, sans-serif;
+}
+
+/* ANA KONTEYNER */
+.container {
+  max-width: 1600px;
+  margin: auto;
+  padding: 20px;
+}
+
+/* FORM */
+form {
+  width: 100%;
+}
+
+/* KART SİSTEMİ */
+fieldset {
+  width: 100%;
+  margin: 20px 0;
+  padding: 20px;
+  border-radius: 14px;
+  border: 1px solid #333;
+  background: #1a1a1a;
+}
+
+legend {
+  font-weight: 600;
+  padding: 0 10px;
+  color: #4da6ff;
+}
+
+/* GRID SİSTEMİ */
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 15px;
+}
+
+.flex {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 15px;
+}
+
+/* FORM ELEMANLARI */
+label {
+  font-size: 14px;
+  margin-bottom: 4px;
+  display: block;
+}
+
+input[type="text"],
+input[type="number"],
+select {
+  width: 180px;
+  padding: 5px;
+}
+
+input[type="range"] {
+  width: 250px;
+}
+
+input[type="checkbox"] {
+  width: auto;
+  transform: scale(1.2);
+  margin-right: 5px;
+}
+
+
+/* RANGE SLIDER DÜZELTME */
+input[type="range"] {
+  width: 100%;
+  margin: 10px 0;
+}
+
+/* BUTON */
+button {
+  padding: 8px 14px;
+  border-radius: 8px;
+  border: none;
+  background: #4da6ff;
+  color: white;
+  cursor: pointer;
+}
+
+button:hover {
+  background: #3399ff;
+}
+
+/* CANVAS RESPONSIVE */
+canvas {
+  width: 100% !important;
+  height: auto !important;
+  max-width: 100%;
+  background: #000;
+  border-radius: 10px;
+}
+
+/* TABLO VARSA TAŞMA ENGELLE */
+.table-wrapper {
+  overflow-x: auto;
+}
+
+/* MOBİL */
+@media (max-width: 768px) {
+  .grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+fieldset p {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+</style>
+
+</head>
+<body onload="Astro()" onunload="SaveCookie()">
+<form>
+
+<fieldset>
+
+<div style="display: flex; align-items: center; gap: 10px; margin-top: 10px;">
+  
+  <div style="margin-left: auto; display: flex; align-items: center; gap: 5px;">
+    <label for="gunSayisi">Gün Sayısı:</label>
+    <input type="number" id="gunSayisi" value="30" min="1" max="1461" style="width: 60px;">
+    <input type="button" value="Çoklu Gün Verisi Üret" onclick="ExportMultipleDays()" style="background-color: darkred; color: white;">
+  </div>
+</div>
+
+
+<div style="
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: flex-start;
+  gap: 20px;
+  width: 100%;
+  max-width: 100%;
+">
+
+<fieldset style="flex:1 1 700px; min-width: 300px;">
+
+  <legend>Astronomik Veriler</legend>
+  <table style=font-size:18px;font-family:Consolas;margin:auto>
+    <td	width=260 id=hicri><td width=180 id=gun>
+    <td	width=220 id=dini style=color:white><td	width=100>
+    <tr><tr>
+    <td style=color:orange><b>Seher<td id=seher style=color:orange>
+    <tr>
+    <td	style=color:lightgreen><b>İmsak<td id=imsak style=color:lightgreen>
+    <td>Ay Yatay Açısı<td id=moonazi>
+    <tr>
+    <td	style=color:lightgreen><b>Güneş<td id=gunes style=color:lightgreen></b>
+    <td>Ay Dikey Açısı<td id=moonelev>
+    <tr>
+    <td>İşrak<td id=israk>
+    <td>Ay Faz Açısı<td	id=moonphase>
+    <tr>
+    <td>İstiva<td id=istiva>
+    <td>Ay Ayrılma Açısı<td id=moonelong>
+    <tr>
+    <td	style=color:white><b>Öğle<td id=ogle style=color:white>
+    <td>Ay Eğim	Açısı<td id=moondecl>
+    <tr>
+    <td	style=color:white><b>İkindi<td id=ikindi style=color:white>
+    <td>Ay Parlaklığı<td id=moonillum>
+    <tr>
+    <td>Asr-ı Sani<td id=asr_2>
+    <td>Ay Kalınlığı<td	id=creswidth>
+    <tr>
+    <td>İsfirar<td id=isfirar>
+    <td>Jeo. Ay	Uzaklığı<td id=moondist0>
+    <tr>
+    <td	style=color:lightgreen><b>Akşam<td id=aksam style=color:lightgreen>
+    <td>Topo. Ay Uzaklığı<td id=moondist>
+    <tr>
+    <td	style=color:white><b>Yatsı<td id=yatsi style=color:white>
+    <td>Güneş Uzaklığı<td id=sundist>
+    <tr>
+    <td>Kıble Saati<td id=qiblatime>
+    <td><div id=moonvis><td id=mvis>
+    <tr><td>&nbsp<tr>
+    <td>Kıble Açısı<td id=qibla>
+    <td>Ekliptik Açısı<td id=sunlong>
+    <tr>
+    <td>Güneş Yatay Açısı<td id=sunazi>
+    <td>Eğim Açısı<td id=sDecl>
+    <tr>
+    <td>Güneş Dikey Açısı<td id=sunelev>
+    <td>Zaman Sapması<td id=EoT>
+    <tr><td>&nbsp<tr>
+    <td	id=speed><td id=head><td id=alti><td id=acc>
+  </table>
+</fieldset>
+
+<fieldset style="flex:1 1 500px; min-width: 300px;">
+
+    <legend>Diğer Ay Verileri</legend>
+    <table>
+      <tr><td colspan="3">
+  <div id="moonDataOutput" style="margin-top:1px; color:lightblue; font-family:Consolas; font-size:16px;"></div>
+    </td></tr>
+    </table>
+</fieldset>
+</div>
+
+<fieldset>
+  <legend>Ayarlar</legend>
+  <table align=center>
+    <td	width=100>Tarih-Saat<td	width=350><input type=datetime-local id=dt onchange=Astro() title="Takvim ya da aşağı/yukarı butonları görünmüyorsa 'yyyy/aa/ggTss:dd' formatında girin. 'Gerçek Zaman' kutucuğu boş bırakılmalıdır.">
+    <input type="button" value="1 Gün İleri Al" onclick="AddOneDay()" style="background-color: orange; color: black; margin-top: 10px;"></td>
+    <td	width=150>İmsak	Temkini<td width=20><input type=number id=tmkn0	value=-2 min=-30 max=0 style="width:60px;" onchange=Astro()	title="0 ila -30 dakika">
+    <tr>
+    <td><td><input type=checkbox id=rt onclick=Astro() checked title="İşaretlenirse sistem saati kullanılır. Bu durumda tüm veri ve grafikler otomatik olarak güncellenir. Geçmiş veya gelecekteki bir tarihe yönelik analiz yapmak istediğinizde kutucuğu boş bırakın.">	Gerçek Zaman
+    <td>Güneş Temkini<td><input	type=number id=tmkn1 value=-7 min=-30 max=0 style="width:60px;" onchange=Astro() title="0 ila -30 dakika">
+    <tr>
+    <td><b>Enlem<td><input type=number id=lat value=37.830436 min=-90.0000000 max=90 style="width:120px;" onchange=Astro() title= "-90 ila +90 derece (kuzey pozitif). 'Gerçek Konum' kutucuğu boş bırakılmalıdır."></b>
+    <input type=checkbox id=map1 style=margin-left:15px	onclick=Map() title="Enlem/Boylama göre 'Google	Harita' yükler"> Harita
+    <td>İşrak Temkini<td><input	type=number id=tmkn2 value=10 min=0 max=30 style="width:60px;" onchange=Astro() title="0 ila +30 dakika">
+    <tr>
+    <td><b>Boylam<td><input type=number	id=lon value=32.436382	min=-180.000000	max=180 style="width:120px;" onchange=Astro() title=	"-180 ila +180 derece (doğu pozitif). 'Gerçek Konum' kutucuğu boş bırakılmalıdır."></b>
+    <input type=range id=zoom style=margin-left:15px;width:60 min=7 max=17 value=12 oninput=Map() title="Haritayı yakınlaştırmak için kaydırın">
+    <td>İstiva Temkini<td><input type=number id=tmkn3 value=0 min=-30 max=0 style="width:60px;" onchange=Astro() title="0 ila -30 dakika">
+    <tr>
+    <td><td><input type=checkbox id=loc	onclick=GPS() title="İşaretlenirse GPS verisi kullanılır. Enlem/Boylam ve harita ile tüm veri ve grafikler otomatik güncellenir. Mevcutsa hız/yön/irtifa ve doğruluk değeri gösterilir."> Gerçek Konum
+    <td>Öğle Temkini<td><input type=number id=tmkn4 value=5 min=0 max=30 style="width:60px;" onchange=Astro() title="0 ila +30 dakika">
+    <tr>
+    <td>Saat Farkı<td><input type=number id=tzone value=2 min=-12.00 max=12 style="width:120px;" onchange=Astro() title="-12 ila +12 saat. 'Sistem SF' kutucuğu boş bırakılmalıdır.">
+    <input type=checkbox id=tz style=margin-left:15px onclick=Astro() checked title="İşaretlenirse, sistem saat dilimi esas alınır."> Sistem SF
+    <td>İkindi Temkini<td><input type=number id=tmkn5 value=5 min=0 max=30 style="width:60px;" onchange=Astro() title="0 ila +30 dakika">
+    <tr>
+    <td>İmsak Açısı<td><input type=number id=fajr value=-18 min=-20.0 max=-10 style="width:120px;" onchange=Astro() title= "-10 ila -20 derece">
+    <td>Asr-ı Sani Temkini<td><input type=number id=tmkn6 value=5 min=0	max=30 style="width:60px;" onchange=Astro()	title="0 ila +30 dakika">
+    <tr>
+    <td>Yatsı Açısı<td><input type=number id=isha value=-17 min=-20.0 max=-10 style="width:120px;" onchange=Astro() title= "-10 ila -20 derece">
+    <td>İsfirar	Temkini<td><input type=number id=tmkn7 value=0 min=-30 max=0 style="width:60px;" onchange=Astro() title="0 ila -30 dakika">
+    <tr>
+    <td	id=mode>Algoritma<td><select id=algo style="width:260px;" onchange=Astro() title="Vakitlerin hesabına ilişkin kriterleri belirler">
+      <option>Salt Astronomik</option>
+      <option>Temkin eklenmiş</option>
+      <option>En kısa gece/gündüz 3 saat</option>
+      <option>En geç yatsı gecenin 1/2'sinde</option>
+      <option>En geç yatsı gecenin 1/3'ünde</option>
+      <option>Yatsı akşamdan 1 saat sonra</option>
+    </select>
+    <td>Akşam Temkini<td><input	type=number id=tmkn8 value=7 min=0 max=30 style="width:60px;" onchange=Astro() title="0 ila +30 dakika">
+    <tr>
+    <td	id=hmode>Hilal<td><select id=halgo style="width:260px;" onchange=Astro() title="Hicri takvime ilişkin gözlem kriterlerini belirler">
+      <option>00:00 GMT'den önce görünür</option>
+      <option>Yerel imsaktan önce görünür</option>
+      <option>Yerel gecenin 1/2'sinden önce görünür</option>
+      <option>Yerel gecenin 1/3'ünden önce görünür</option>
+      <option>Yerel yatsıdan önce görünür</option>
+    </select>
+    <td>Yatsı Temkini<td><input	type=number id=tmkn9 value=2 min=0 max=60 style="width:60px;" onchange=Astro() title="0 ila +60 dakika">
+  </table>
+  <br><iframe id=map frameborder=0></iframe>
+</fieldset>
+
+
+<fieldset>
+  <legend>Grafikler</legend>
+  <p><input type=checkbox id=angles1 onclick=Graph(1) title="Güneş, ay ve kıblenin kuzey açısı ile güneş ve ayın ufuktan yüksekliği... GPS yön verisi mevcutsa kuzey açıları hareket eder (pusula özelliği)"> Açılar</p><canvas	id=angles></canvas>
+  <p><input type=checkbox id=rendo1 onclick=Graph(1) title="Gökyüzünün 360° panoramik görünümü"> Gökyüzü Panoraması
+  <input type=range id=Turbi style=width:100;margin-left:100px value=6 min=5 max=30 title="Pus"	oninput=Graph(1)>
+  <input type=range id=Luma style=width:100;margin-left:100px value=10 min=8 max=33 title="Parlaklık" oninput=Graph(1)></p><canvas id=rendo></canvas>
+  <p><input type=checkbox id=moon1 onclick=Graph(1) title="Ayın topografik görünümü"> Ay Görüntüsü</p><canvas id=moon onclick=Graph(2) title="Arka-plan gökyüzü ışımasını açıp kapamak için tıklayın"></canvas>
+  <img id=moon0	hidden src=data:image/jpeg;base64,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>
+
+  <p><input type=checkbox id=traject1 onclick=Graph(1) title="Güneşin ve ayın gökyüzünde çizdiği 3 boyutlu günlük yörünge"> Yörüngeler</p><canvas id=traject></canvas>
+  <p><input type=checkbox id=globe1 onclick=Graph(1) title="Yerkürenin ekliptik görünümü"> Yerküre Görüntüsü</p><canvas	id=globe></canvas>
+  <p><input type=checkbox id=earth1 onclick=Graph(1) title="Dünya haritası üzerinde tüm namaz/kerahet vakitlerini gösterir. Sabah/Akşam: mavi, kerahet: turuncu, Yatsı: gri, İstiva: mor, Öğle: beyaz, İkindi: açık yeşil, Asr-ı Sani: koyu yeşil">	Dünya Vakitleri<pre id=coor align=center></pre><canvas id=earth	onmousemove=showXY(event) onmouseout=clearXY()></canvas>
+  <img id=earth0 hidden	src=data:image/png;base64,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>
+</fieldset>
+<fieldset id=db>
+  <legend>Gösterge Tablosu</legend><canvas id=dash></canvas>
+</fieldset>
+
+
+
+<br><br><br><center><a href=tr_evkat.htm>Kullanım Kılavuzu</a>
+<br><br><br>Abdurrahman ÖZLEM © 1994-2021 (PrayWare) verilerinden faydalanılmıştır.<br><b>18 Şubat 2026 tarihinde Bilal ÜZÜLMEZ tarafından geliştirilerek güncellenmiştir.<br><br><hr>
+</form>
+<script>
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('sw.js');
+}
+</script>
+</body></html>
